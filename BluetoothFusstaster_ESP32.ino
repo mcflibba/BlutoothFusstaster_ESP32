@@ -1,8 +1,3 @@
-
-
-
-
-
 /*
    Sample program for ESP32 acting as a Bluetooth keyboard
 
@@ -31,15 +26,28 @@
 
 
 //==========================================
+/*Bluetooth Fusstaster_ESP32
+--------------------------------------------
+- Fusstaster fuer das umblaettern von Seiten am IPAD/Iphone
+- Programm emuliert eine Bluetooth-Tastatur
+
+1. Go to your computers/phones settings
+2. Ensure Bluetooth is turned on
+3. Scan for Bluetooth devices
+4. Connect to the device called "ESP32 Keyboard"
+5. Open an empty document in a text editor
+6. Press the button attached to the ESP32
+
+
+*/
+
+//==========================================
 
 
 /* R02_4_Dummy; 03.06.2024, fr
     - Status LED fuer Bluetooth hinzugefuegt
-    - Automatisches verbinden nach Verlust der Verbindung
-
-    
+    - Automatisches verbinden nach Verlust der Verbindung   
 */
-
 /* R02_3; 01.06.2024, fr
     - Tastendelay als Variable fuer Haupttaster und Switch-taster eingefuehrt
     - Tastendelay fuer Haupttaster verlaengert 100 -> 200
