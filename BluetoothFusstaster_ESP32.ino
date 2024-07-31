@@ -58,8 +58,8 @@
     - Information ueber Programmversion wird per Seriell uebertragen
 */
 
-#define US_KEYBOARD 1
-#define REVISION_STAND "BlutoothTastatur_ESP32_R02_4Dummy" //hier den Namen des Programms mit dem aktuellen Revisionsstand angeben
+const int US_KEYBOARD = 1;
+const char REVISION_STAND = "BlutoothTastatur_ESP32_R02_4Dummy"; //hier den Namen des Programms mit dem aktuellen Revisionsstand angeben
 
 #include <Arduino.h>
 #include "BLEDevice.h"
@@ -71,36 +71,28 @@
 
 
 // Change the below values if desired
-#define BUTTON_PIN_DOWN 2
-#define BUTTON_PIN_UP 4
-#define BUTTON_PIN_LEFT 5
-#define BUTTON_PIN_RIGHT 19
-#define BUTTON_PIN_SPACEBAR 12
-
-
 #define MOUSE_BUTTON_LEFT   0x01
 #define MOUSE_BUTTON_RIGHT  0x02
 #define MOUSE_BUTTON_MIDDLE 0x04
 
+const int MAIN_BUTTON_RIGHT = 4;
+const int MAIN_BUTTON_LEFT = 16;
+const int MAIN_BUTTON_SWITCH = 17;
 
-#define MAIN_BUTTON_RIGHT 4
-#define MAIN_BUTTON_LEFT 16
-#define MAIN_BUTTON_SWITCH 17
-
-#define DELAY_MAIN_BUTTON 200
-#define DELAY_MAIN_BUTTON_SWITCH 200
+const int DELAY_MAIN_BUTTON = 200;
+const int DELAY_MAIN_BUTTON_SWITCH = 200;
 
 
-#define LED_STATUS_1 32
-#define LED_STATUS_2 33
-#define LED_STATUS_3 25
-#define LED_STATUS_4 26
-#define LED_STATUS_5 27
+const int LED_STATUS_1 = 32;
+const int LED_STATUS_2 = 33;
+const int LED_STATUS_3 = 25;
+const int LED_STATUS_4 = 26;
+const int LED_STATUS_5 = 27;
 
 int LED_STATUS[] = {LED_STATUS_1, LED_STATUS_2, LED_STATUS_3, LED_STATUS_4, LED_STATUS_5};
 int Status = 0;
 
-#define LED_BLUETOOTH 14
+const int LED_BLUETOOTH =14;
 
 
 uint8_t COMMAND_LEFT[] = {
@@ -108,6 +100,7 @@ uint8_t COMMAND_LEFT[] = {
   0x50, // Keyboard Left Arrow,
   0x4b, // Keyboard Page Up,
   0x2c // Keyboard Space Bar
+  0x01 // Left mouse button
 };
 
 uint8_t COMMAND_RIGHT[] = {
@@ -115,10 +108,11 @@ uint8_t COMMAND_RIGHT[] = {
   0x4f, // Keyboard Right Arrow,
   0x4e, // Keyboard Page Down,
   0x28 // Keyboard Enter
+  0x02  // Right mouse button
 };
 
 
-#define DEVICE_NAME "ESP32 Noten"
+const char DEVICE_NAME = "ESP32 Noten"; //Name des Bluetooth Device, welcher am Ipad angezeigt wird
 
 
 
