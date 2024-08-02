@@ -1,48 +1,33 @@
-/*
-   Sample program for ESP32 acting as a Bluetooth keyboard
-
-   Copyright (c) 2019 Manuel Bl
-
-   Licensed under MIT License
-   https://opensource.org/licenses/MIT
-*/
-
-//
-// This program lets an ESP32 act as a keyboard connected via Bluetooth.
-// When a button attached to the ESP32 is pressed, it will generate the key strokes for a message.
-//
-// For the setup, a momentary button should be connected to pin 2 and to ground.
-// Pin 2 will be configured as an input with pull-up.
-//
-// In order to receive the message, add the ESP32 as a Bluetooth keyboard of your computer
-// or mobile phone:
-//
-// 1. Go to your computers/phones settings
-// 2. Ensure Bluetooth is turned on
-// 3. Scan for Bluetooth devices
-// 4. Connect to the device called "ESP32 Keyboard"
-// 5. Open an empty document in a text editor
-// 6. Press the button attached to the ESP32
-
-
 //==========================================
 /*Bluetooth Fusstaster_ESP32
 --------------------------------------------
 - Fusstaster fuer das umblaettern von Seiten am IPAD/Iphone
 - Programm emuliert eine Bluetooth-Tastatur
 
+Anleitung Verbinden mit Ipad
 1. Go to your computers/phones settings
 2. Ensure Bluetooth is turned on
 3. Scan for Bluetooth devices
-4. Connect to the device called "ESP32 Keyboard"
-5. Open an empty document in a text editor
-6. Press the button attached to the ESP32
+4. Connect to the device called "ESP32...."
+5. Select Key-Combination with selection-switch
+6. Press the button attached to the ESP32 to send signals
 
-
+Anleitung Benutzung Key-Combination
+1. Key Up / Down
+2. Key Left / Right
+3. Key Pg Down / Pg Up
+4. Key Space / Enter
 */
 
 //==========================================
-
+/* R03_0_Release; 03.08.2024, fr
+    - #define durch const ersetzt
+    - Aufbau fuer neue Schaltung
+    - Intergration Tastenentprellen
+    - Einzelener Tastendruck statt mehrfache Befehle
+    - Funktion eingefuehrt fuer das Ruecksetzen der LEDs
+    - Reduktion der verschiedenen Varianten auf 4, nur Tastaturbefehle 
+*/
 
 /* R02_4_Dummy; 03.06.2024, fr
     - Status LED fuer Bluetooth hinzugefuegt
@@ -59,7 +44,7 @@
 */
 
 const int US_KEYBOARD = 1;
-const char REVISION_STAND = "BlutoothTastatur_ESP32_R02_4Dummy"; //hier den Namen des Programms mit dem aktuellen Revisionsstand angeben
+const char* REVISION_STAND = "BluetoothFusstaster_ESP32_R03_0_Release"; //hier den Namen des Programms mit dem aktuellen Revisionsstand angeben
 
 #include <Arduino.h>
 #include "BLEDevice.h"
@@ -67,14 +52,8 @@ const char REVISION_STAND = "BlutoothTastatur_ESP32_R02_4Dummy"; //hier den Name
 #include "HIDTypes.h"
 #include "HIDKeyboardTypes.h"
 
-//BleMouse bleMouse;
-
 
 // Change the below values if desired
-#define MOUSE_BUTTON_LEFT   0x01
-#define MOUSE_BUTTON_RIGHT  0x02
-#define MOUSE_BUTTON_MIDDLE 0x04
-
 const int MAIN_BUTTON_RIGHT = 4;
 const int MAIN_BUTTON_LEFT = 16;
 const int MAIN_BUTTON_SWITCH = 17;
@@ -82,88 +61,96 @@ const int MAIN_BUTTON_SWITCH = 17;
 const int DELAY_MAIN_BUTTON = 200;
 const int DELAY_MAIN_BUTTON_SWITCH = 200;
 
+int toggleStatusRight = 0;  // ToogleStatus um nur eine Schaltung auszuloesen
+int toggleStatusLeft = 0;
+int toggleStatusSwitch = 0;
 
+//Variablen fuer das Entprellen
+int buttonStateRight = 0; 
+int buttonStateLeft = 0; 
+int buttonStateSwitch = 0;
+
+int lastButtonStateRight = 0;
+int lastButtonStateLeft = 0;
+int lastButtonStateSwitch = 0;
+
+bool buttonPressedRight = false;
+bool buttonPressedLeft = false;
+bool buttonPressedSwitch = false;
+
+unsigned long lastDebounceTimeRight = 0;  // Die letzte Zeit, zu der der Tasterstatus geändert wurde
+unsigned long lastDebounceTimeLeft = 0;  // Die letzte Zeit, zu der der Tasterstatus geändert wurde
+unsigned long lastDebounceTimeSwitch = 0;  // Die letzte Zeit, zu der der Tasterstatus geändert wurde
+unsigned long debounceDelay = 50;    // Zeit zum Entprellen in Millisekunden
+
+// Definition LEDs
 const int LED_STATUS_1 = 32;
 const int LED_STATUS_2 = 33;
 const int LED_STATUS_3 = 25;
 const int LED_STATUS_4 = 26;
-const int LED_STATUS_5 = 27;
 
-int LED_STATUS[] = {LED_STATUS_1, LED_STATUS_2, LED_STATUS_3, LED_STATUS_4, LED_STATUS_5};
+const int lengthArrayLedStatus = 4;
+const int LED_STATUS[lengthArrayLedStatus] = {LED_STATUS_1, LED_STATUS_2, LED_STATUS_3, LED_STATUS_4};
 int Status = 0;
 
 const int LED_BLUETOOTH =14;
-
 
 uint8_t COMMAND_LEFT[] = {
   0x52, // Keyboard Up Arrow,
   0x50, // Keyboard Left Arrow,
   0x4b, // Keyboard Page Up,
-  0x2c // Keyboard Space Bar
-  0x01 // Left mouse button
+  0x2c // Keyboard Space Bar,
 };
 
 uint8_t COMMAND_RIGHT[] = {
   0x51, // Keyboard Down Arrow,
   0x4f, // Keyboard Right Arrow,
   0x4e, // Keyboard Page Down,
-  0x28 // Keyboard Enter
-  0x02  // Right mouse button
+  0x28 // Keyboard Enter,
 };
 
-
-const char DEVICE_NAME = "ESP32 Noten"; //Name des Bluetooth Device, welcher am Ipad angezeigt wird
-
-
+const char* DEVICE_NAME = "ESP32-Fusstaster"; //Name des Bluetooth Device, welcher am Ipad angezeigt wird
 
 // Forward declarations
 void bluetoothTask(void*);
 void typeText(const char* text);
 
-
 bool isBleConnected = false;
-
+//-------------------------------------
 
 void setup() {
+  //Initialisierung Serial-Connection
   Serial.begin(115200);
- // bleMouse.begin(); //Initialisieren der Maus
+  Serial.print("Device name: ");
+  Serial.println(DEVICE_NAME);
 
-  // configure pin for button
+  // configure pins for buttons
   pinMode(MAIN_BUTTON_RIGHT, INPUT_PULLUP);
   pinMode(MAIN_BUTTON_LEFT, INPUT_PULLUP);
   pinMode(MAIN_BUTTON_SWITCH, INPUT_PULLUP);
 
-
-  //for (int i=0; i <= LED_STATUS[]
-
-  pinMode(LED_STATUS_1, OUTPUT);
-  pinMode(LED_STATUS_2, OUTPUT);
-  pinMode(LED_STATUS_3, OUTPUT);
-  pinMode(LED_STATUS_4, OUTPUT);
-  pinMode(LED_STATUS_5, OUTPUT);
-
+  // configure pins for Status-LEDs
+  for (int i=0; i < lengthArrayLedStatus; i++) {
+    pinMode (LED_STATUS[i], OUTPUT);
+  }
   pinMode(LED_BLUETOOTH, OUTPUT);
+  
+// Initialisierung Status-LEDs
+  resetLEDs(LED_STATUS,lengthArrayLedStatus);
+  digitalWrite(LED_STATUS[Status], HIGH);
   digitalWrite(LED_BLUETOOTH, LOW);
-
-
-
-
 
   // start Bluetooth task
   xTaskCreate(bluetoothTask, "bluetooth", 20000, NULL, 5, NULL);
-
-
-  // Initialisierung Status-LEDs
-  for (int Zaehler = 0; Zaehler <= 4; Zaehler++) {  //Reset LEDs
-    digitalWrite(LED_STATUS[Zaehler], LOW);
-  }
-  digitalWrite(LED_STATUS[Status], HIGH);
-}
+  
+} //End Setup
 
 
 void loop() {
-
-// Abfrage mit Neue Verbindung
+  
+//-----------------------------
+// Abfrage der Bluetooth-Verbindung
+//-----------------------------
   if (isBleConnected){
     digitalWrite(LED_BLUETOOTH, HIGH);     
   }
@@ -171,61 +158,105 @@ void loop() {
     digitalWrite(LED_BLUETOOTH, LOW);  
   }
 
+//-----------------------------
+// Taster Entprellen
+//-----------------------------
 
-  if (digitalRead(MAIN_BUTTON_SWITCH) == LOW) {
-    for (int Zaehler = 0; Zaehler <= 4; Zaehler++) { //Reset LEDs
-      digitalWrite(LED_STATUS[Zaehler], LOW);
+// Lese den Zustand jedes Tasters
+  int readingRight = digitalRead(MAIN_BUTTON_RIGHT);
+  int readingLeft = digitalRead(MAIN_BUTTON_LEFT);
+  int readingSwitch = digitalRead(MAIN_BUTTON_SWITCH);
+
+//-------Button Switch
+  if (readingSwitch != lastButtonStateSwitch) {
+      lastDebounceTimeSwitch = millis();
     }
+  if ((millis() - lastDebounceTimeSwitch) > debounceDelay) {
+    if (readingSwitch != buttonStateSwitch) {
+      buttonStateSwitch = readingSwitch;
 
-  Status++;
-  if (Status > 4){
-    Status = 0;
+      if (buttonStateSwitch == LOW) {
+        buttonPressedSwitch = true;
+      } else {
+        buttonPressedSwitch = false;
+        toggleStatusSwitch = 0;
+      }
+    }
   }
   
-  Serial.print("Das ist der Status: ");
-  Serial.println(Status);
-
-  digitalWrite(LED_STATUS[Status], HIGH);
-  delay(DELAY_MAIN_BUTTON_SWITCH);
+//-------Button Right
+  if (readingRight != lastButtonStateRight) {
+    lastDebounceTimeRight = millis();
   }
+  if ((millis() - lastDebounceTimeRight) > debounceDelay) {
+    if (readingRight != buttonStateRight) {
+      buttonStateRight = readingRight;
 
-
-  if (Status == 4) { //Mausklick-Option
-    if (isBleConnected && digitalRead(MAIN_BUTTON_RIGHT) == LOW) {
-      Serial.print("Button rechts MAusschleife: ");
-      Serial.println(Status);
-     // bleMouse.click(MOUSE_RIGHT);
-     sendMouseClick(MOUSE_BUTTON_RIGHT);
-      delay(DELAY_MAIN_BUTTON);
-    }
-
-    if (isBleConnected && digitalRead(MAIN_BUTTON_LEFT) == LOW) {
-      Serial.print("Button links MAusschleife: ");
-      Serial.println(Status);
-     // bleMouse.click(MOUSE_LEFT);
-     sendMouseClick(MOUSE_BUTTON_LEFT);
-      delay(DELAY_MAIN_BUTTON);
-    }
-
-  }
-  else {
-
-    if (isBleConnected && digitalRead(MAIN_BUTTON_RIGHT) == LOW) {
-      Serial.print("COMMAND_RIGHT: ");
-      Serial.println(COMMAND_RIGHT[Status]);
-      sendKeyCode(COMMAND_RIGHT[Status]);
-      delay(DELAY_MAIN_BUTTON);
-    }
-
-    if (isBleConnected && digitalRead(MAIN_BUTTON_LEFT) == LOW) {
-      Serial.print("COMMAND_LEFT: ");
-      Serial.println(COMMAND_LEFT[Status]);
-      sendKeyCode(COMMAND_LEFT[Status]);
-      delay(DELAY_MAIN_BUTTON);
+      if (buttonStateRight == LOW) {
+        buttonPressedRight = true;
+      } else {
+        buttonPressedRight = false;
+        toggleStatusRight = 0;
+      }
     }
   }
+//-------Button Left
+  if (readingLeft != lastButtonStateLeft) {
+    lastDebounceTimeLeft = millis();
+  }
+  if ((millis() - lastDebounceTimeLeft) > debounceDelay) {
+    if (readingLeft != buttonStateLeft) {
+      buttonStateLeft = readingLeft;
 
-}
+      if (buttonStateLeft == LOW) {
+        buttonPressedLeft = true;
+      } else {
+        buttonPressedLeft = false;
+        toggleStatusLeft = 0;
+      }
+    }
+  }
+  
+//-----------------------------
+// Taster Ereignisse
+//-----------------------------   
+// Taster Switch 
+  if (toggleStatusSwitch == 0 && buttonPressedSwitch == true) {
+    resetLEDs(LED_STATUS,lengthArrayLedStatus);
+    
+    Status++;
+    if (Status >= lengthArrayLedStatus){
+      Status = 0;
+    }
+    Serial.print("Das ist der Status: ");
+    Serial.println(Status);
+    digitalWrite(LED_STATUS[Status], HIGH);
+    toggleStatusSwitch = 1;
+  }
+    
+// Taster Right
+  if (isBleConnected && toggleStatusRight == 0 && buttonPressedRight == true) {
+    //if (isBleConnected && buttonPressedRight == true) {
+    Serial.print("COMMAND_RIGHT: ");
+    Serial.println(COMMAND_RIGHT[Status]);
+    sendKeyCode(COMMAND_RIGHT[Status]);
+    toggleStatusRight = 1;
+  }
+
+// Taster Left
+  if (isBleConnected && toggleStatusLeft == 0 && buttonPressedLeft == true) {
+    Serial.print("COMMAND_LEFT: ");
+    Serial.println(COMMAND_LEFT[Status]);
+    sendKeyCode(COMMAND_LEFT[Status]);
+    toggleStatusLeft = 1;
+  }
+
+// Aktualisiere den letzten Zustand jedes Tasters
+  lastButtonStateRight = readingRight;
+  lastButtonStateLeft = readingLeft;
+  lastButtonStateSwitch = readingSwitch;
+
+} //End Loop
 
 
 // Message (report) sent when a key is pressed or released
@@ -368,7 +399,8 @@ void bluetoothTask(void*) {
 
   // advertise the services
   BLEAdvertising* advertising = server->getAdvertising();
-  advertising->setAppearance(HID_KEYBOARD);
+   // advertising->setAppearance(HID_KEYBOARD);
+  advertising->setAppearance(HID_MOUSE);
   advertising->addServiceUUID(hid->hidService()->getUUID());
   advertising->addServiceUUID(hid->deviceInfo()->getUUID());
   advertising->addServiceUUID(hid->batteryService()->getUUID());
@@ -436,25 +468,27 @@ void sendKeyCode(uint8_t keyCode) {
 
 
 void sendMouseClick(uint8_t button) {
-  // Erstelle ein Report-Objekt für Mausaktionen
-  uint8_t report[] = {0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+    // Erstelle ein Report-Objekt für Mausaktionen
+    uint8_t report[] = {0x00, 0x00, 0x00, 0x00};
 
-  // Setze den entsprechenden Maus-Button im Report
-  switch (button) {
-    case MOUSE_BUTTON_LEFT:
-      report[0] |= 0x01; // Bit 0 für linke Maustaste setzen
-      break;
-    case MOUSE_BUTTON_RIGHT:
-      report[0] |= 0x02; // Bit 1 für rechte Maustaste setzen
-      break;
-    case MOUSE_BUTTON_MIDDLE:
-      report[0] |= 0x04; // Bit 2 für mittlere Maustaste setzen
-      break;
-    default:
-      break;
+    // Setze den entsprechenden Maus-Button im Report
+    report[0] = button;
+
+    // Sende den Report über das HID-Protokoll
+    input->setValue(report, sizeof(report));
+    input->notify();
+    delay(10);
+
+    // Release the mouse button
+    report[0] = 0x00;
+    input->setValue(report, sizeof(report));
+    input->notify();
+    delay(10);
+}
+
+
+void resetLEDs(const int* leds, const int length) {
+  for (int i = 0; i < length; i++) {
+    digitalWrite(leds[i], LOW);
   }
-
-  // Sende den Report über das HID-Protokoll
-  input->setValue(report, sizeof(report));
-  input->notify();
 }
