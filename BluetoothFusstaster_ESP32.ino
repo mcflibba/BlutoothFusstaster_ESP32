@@ -20,13 +20,18 @@ Anleitung Benutzung Key-Combination
 */
 
 //==========================================
+/* R03_1_Release; 03.08.2024, fr
+    - nicht genutzten Code bereinigt: void Mousclick entfernt 
+    - nicht getesteter Release
+*/
 /* R03_0_Release; 03.08.2024, fr
     - #define durch const ersetzt
     - Aufbau fuer neue Schaltung
     - Intergration Tastenentprellen
     - Einzelener Tastendruck statt mehrfache Befehle
     - Funktion eingefuehrt fuer das Ruecksetzen der LEDs
-    - Reduktion der verschiedenen Varianten auf 4, nur Tastaturbefehle 
+    - Reduktion der verschiedenen Varianten auf 4, nur Tastaturbefehle
+    - getester Release
 */
 
 /* R02_4_Dummy; 03.06.2024, fr
@@ -44,7 +49,7 @@ Anleitung Benutzung Key-Combination
 */
 
 const int US_KEYBOARD = 1;
-const char* REVISION_STAND = "BluetoothFusstaster_ESP32_R03_0_Release"; //hier den Namen des Programms mit dem aktuellen Revisionsstand angeben
+const char* REVISION_STAND = "BluetoothFusstaster_ESP32_R03_1_Release"; //hier den Namen des Programms mit dem aktuellen Revisionsstand angeben
 
 #include <Arduino.h>
 #include "BLEDevice.h"
@@ -465,27 +470,6 @@ void sendKeyCode(uint8_t keyCode) {
   input->notify();
   delay(5);
 }
-
-
-void sendMouseClick(uint8_t button) {
-    // Erstelle ein Report-Objekt für Mausaktionen
-    uint8_t report[] = {0x00, 0x00, 0x00, 0x00};
-
-    // Setze den entsprechenden Maus-Button im Report
-    report[0] = button;
-
-    // Sende den Report über das HID-Protokoll
-    input->setValue(report, sizeof(report));
-    input->notify();
-    delay(10);
-
-    // Release the mouse button
-    report[0] = 0x00;
-    input->setValue(report, sizeof(report));
-    input->notify();
-    delay(10);
-}
-
 
 void resetLEDs(const int* leds, const int length) {
   for (int i = 0; i < length; i++) {
